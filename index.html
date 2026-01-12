@@ -1,0 +1,235 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Агро Контроль v8.3</title>
+<meta name="theme-color" content="#28a745">
+<style>
+body, html { margin:0; padding:0; font-family:-apple-system,BlinkMacSystemFont,sans-serif; overflow:hidden; height:100%; background:#87ceeb; }
+canvas#bg { position:fixed; top:0; left:0; z-index:-1; width:100%; height:100%; }
+h1 { text-align:center; margin:16px 0; color:white; text-shadow:0 2px 4px rgba(0,0,0,0.5);}
+.menu { display:flex; flex-wrap:wrap; justify-content:center; margin-top:40px; }
+.menu-btn { padding:18px 30px; margin:10px; border-radius:24px; font-size:20px; font-weight:600; color:white;
+  background: linear-gradient(135deg,#28a745,#7ed957); box-shadow:0 6px 12px rgba(0,0,0,0.25); cursor:pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.menu-btn:hover { transform:scale(1.05); box-shadow:0 8px 16px rgba(0,0,0,0.3);}
+.section { display:none; padding:16px; overflow-y:auto; height:calc(100% - 80px);}
+.card { border-radius:16px; background: linear-gradient(145deg,#ffffff,#f1f8f4); box-shadow:0 4px 12px rgba(0,0,0,0.1);
+  padding:16px; margin-bottom:14px; transition: transform 0.3s, box-shadow 0.3s;
+}
+.card:hover { transform:translateY(-4px); box-shadow:0 8px 20px rgba(0,0,0,0.15);}
+input, select { width:100%; padding:12px; margin-bottom:10px; border-radius:16px; border:1px solid #ddd; font-size:16px; box-sizing:border-box; }
+button.add-btn { width:100%; padding:14px; font-size:16px; border:none; border-radius:24px; background:linear-gradient(135deg,#28a745,#7ed957); color:white; cursor:pointer; margin-top:6px; transition: transform 0.2s;}
+button.add-btn:hover { transform:scale(1.03); }
+.nav-btn { margin:10px 0; padding:12px; border-radius:24px; background:linear-gradient(135deg,#ffa000,#ffc107); color:white; font-weight:600; width:100%; cursor:pointer; transition: transform 0.2s;}
+.nav-btn:hover { transform:scale(1.03); }
+.summary { padding:12px; background:rgba(255,255,255,0.85); border-radius:16px; margin-bottom:10px; font-weight:600;}
+canvas.chart { width:100%; height:200px; margin-bottom:16px; }
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+
+<h1>Агро Контроль v8.3</h1>
+
+<div class="menu" id="mainMenu">
+  <div class="menu-btn" onclick="showSection('animals')">Животные 🐄</div>
+  <div class="menu-btn" onclick="showSection('feeds')">Корма 🥕</div>
+  <div class="menu-btn" onclick="showSection('machines')">Техника 🚜</div>
+  <div class="menu-btn" onclick="showSection('report')">Отчёт 📊</div>
+</div>
+
+<!-- Животные -->
+<div class="section" id="animals">
+  <button class="nav-btn" onclick="backMenu()">⬅ Главное меню</button>
+  <div class="card">
+    <input id="animalName" placeholder="Имя/ID животного">
+    <input id="pedigree" placeholder="Родословная">
+    <input id="weight" type="number" placeholder="Вес (кг)">
+    <input id="color" placeholder="Окрас">
+    <input id="breed" placeholder="Порода">
+    <input id="weightHistory" placeholder="История веса (дата:вес;...)">
+    <button class="add-btn" onclick="addAnimal()">Добавить животное</button>
+  </div>
+  <div id="animalSummary" class="summary"></div>
+  <canvas id="weightChart" class="chart"></canvas>
+  <div id="animalList"></div>
+</div>
+
+<!-- Корма -->
+<div class="section" id="feeds">
+  <button class="nav-btn" onclick="backMenu()">⬅ Главное меню</button>
+  <div class="card">
+    <input id="feedType" placeholder="Вид корма">
+    <input id="feedIssued" type="number" placeholder="Выдано">
+    <input id="feedStock" type="number" placeholder="Запас">
+    <select id="feedUnit">
+      <option>кг</option>
+      <option>тюк</option>
+      <option>мешок</option>
+      <option>шт</option>
+    </select>
+    <input id="feedComponents" placeholder="Компоненты (%) кукуруза:50; соя:30; витамины:20">
+    <button class="add-btn" onclick="addFeed()">Добавить корм</button>
+  </div>
+  <div id="feedSummary" class="summary"></div>
+  <canvas id="feedChart" class="chart"></canvas>
+  <div id="feedList"></div>
+</div>
+
+<!-- Техника -->
+<div class="section" id="machines">
+  <button class="nav-btn" onclick="backMenu()">⬅ Главное меню</button>
+  <div class="card">
+    <input id="machineType" placeholder="Вид техники">
+    <input id="fuel" type="number" placeholder="Топливо (л)">
+    <input id="motohours" type="number" placeholder="Моточасы">
+    <input id="lastService" type="date" placeholder="ТО">
+    <input id="location" placeholder="Локация">
+    <input id="status" placeholder="Статус">
+    <button class="add-btn" onclick="addMachine()">Добавить технику</button>
+  </div>
+  <div id="machineList"></div>
+</div>
+
+<!-- Отчёт -->
+<div class="section" id="report">
+  <button class="nav-btn" onclick="backMenu()">⬅ Главное меню</button>
+  <button class="add-btn" onclick="exportCSV()">Экспорт CSV</button>
+  <button class="add-btn" onclick="copyReport()">Копировать отчёт</button>
+</div>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+// ===== LocalStorage =====
+let animals=JSON.parse(localStorage.getItem('animals')||'[]');
+let feeds=JSON.parse(localStorage.getItem('feeds')||'[]');
+let machines=JSON.parse(localStorage.getItem('machines')||'[]');
+
+// ===== Navigation =====
+function showSection(id){
+  document.getElementById('mainMenu').style.display='none';
+  ['animals','feeds','machines','report'].forEach(s=>document.getElementById(s).style.display='none');
+  document.getElementById(id).style.display='block';
+  renderAll();
+}
+function backMenu(){ document.getElementById('mainMenu').style.display='flex'; ['animals','feeds','machines','report'].forEach(s=>document.getElementById(s).style.display='none'); }
+
+// ===== Save =====
+function saveAll(){ localStorage.setItem('animals',JSON.stringify(animals)); localStorage.setItem('feeds',JSON.stringify(feeds)); localStorage.setItem('machines',JSON.stringify(machines)); }
+
+// ===== Render =====
+function renderAll(){ renderAnimals(); renderFeeds(); renderMachines(); renderCharts(); }
+
+function renderAnimals(){
+  const container=document.getElementById('animalList'); container.innerHTML='';
+  let totalWeight=0;
+  animals.forEach((a,i)=>{
+    totalWeight+=Number(a.weight)||0;
+    const div=document.createElement('div'); div.className='card';
+    div.innerHTML=`<strong>${a.name}</strong><br>Родословная: ${a.pedigree||''}<br>Вес: ${a.weight||''} кг<br>Окрас: ${a.color||''}<br>Порода: ${a.breed||''}<br>История веса: ${a.weightHistory||''} <button onclick="deleteAnimal(${i})">Удалить</button>`;
+    container.appendChild(div);
+  });
+  document.getElementById('animalSummary').innerText=`Всего животных: ${animals.length}, суммарный вес: ${totalWeight} кг`;
+}
+
+function renderFeeds(){
+  const container=document.getElementById('feedList'); container.innerHTML='';
+  let totalIssued=0, totalStock=0;
+  feeds.forEach((f,i)=>{
+    totalIssued+=Number(f.issued)||0; totalStock+=Number(f.stock)||0;
+    const div=document.createElement('div'); div.className='card';
+    div.innerHTML=`<strong>${f.type}</strong><br>Выдано: ${f.issued} ${f.unit}<br>Запас: ${f.stock} ${f.unit}<br>Компоненты: ${f.components||''} <button onclick="deleteFeed(${i})">Удалить</button>`;
+    container.appendChild(div);
+  });
+  document.getElementById('feedSummary').innerText=`Всего кормов: ${feeds.length}, Выдано: ${totalIssued}, Запас: ${totalStock}`;
+}
+
+function renderMachines(){
+  const container=document.getElementById('machineList'); container.innerHTML='';
+  machines.forEach((m,i)=>{
+    const div=document.createElement('div'); div.className='card';
+    div.innerHTML=`<strong>${m.type}</strong><br>ТО: ${m.lastService||''}<br>Топливо: ${m.fuel||''} л<br>Моточасы: ${m.motohours||''}<br>Локация: ${m.location||''}<br>Статус: ${m.status||''} <button onclick="deleteMachine(${i})">Удалить</button>`;
+    container.appendChild(div);
+  });
+}
+
+// ===== Add/Delete =====
+function addAnimal(){ const name=document.getElementById('animalName').value.trim(); if(!name){alert('Введите имя животного'); return;}
+  animals.push({name, pedigree:document.getElementById('pedigree').value.trim(), weight:document.getElementById('weight').value.trim(), color:document.getElementById('color').value.trim(), breed:document.getElementById('breed').value.trim(), weightHistory:document.getElementById('weightHistory').value.trim()});
+  saveAll(); renderAll();
+}
+function addFeed(){ const type=document.getElementById('feedType').value.trim(); if(!type){alert('Введите вид корма'); return;}
+  feeds.push({type, issued:document.getElementById('feedIssued').value.trim(), stock:document.getElementById('feedStock').value.trim(), unit:document.getElementById('feedUnit').value, components:document.getElementById('feedComponents').value.trim()});
+  saveAll(); renderAll();
+}
+function addMachine(){ const type=document.getElementById('machineType').value.trim(); if(!type){alert('Введите вид техники'); return;}
+  machines.push({type, fuel:document.getElementById('fuel').value.trim(), motohours:document.getElementById('motohours').value.trim(), lastService:document.getElementById('lastService').value, location:document.getElementById('location').value.trim(), status:document.getElementById('status').value.trim()});
+  saveAll(); renderAll();
+}
+function deleteAnimal(i){ animals.splice(i,1); saveAll(); renderAll();}
+function deleteFeed(i){ feeds.splice(i,1); saveAll(); renderAll();}
+function deleteMachine(i){ machines.splice(i,1); saveAll(); renderAll();}
+
+// ===== Export/Copy =====
+function exportCSV(){ let csv="Раздел,Имя/Тип,Дополнительно\n";
+  animals.forEach(a=>{csv+=`Животные,${a.name},Вес:${a.weight},Окрас:${a.color},Порода:${a.breed}\n`;});
+  feeds.forEach(f=>{csv+=`Корма,${f.type},Выдано:${f.issued} ${f.unit},Запас:${f.stock} ${f.unit},Компоненты:${f.components}\n`;});
+  machines.forEach(m=>{csv+=`Техника,${m.type},ТО:${m.lastService},Топливо:${m.fuel},Моточасы:${m.motohours},Локация:${m.location},Статус:${m.status}\n`;});
+  const blob=new Blob([csv],{type:"text/csv"}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='agro_control_v8_3.csv'; a.click(); URL.revokeObjectURL(url);
+}
+function copyReport(){ let text="";
+  animals.forEach(a=>{text+=`Животные | ${a.name} | Вес:${a.weight} | Окрас:${a.color} | Порода:${a.breed}\n`;});
+  feeds.forEach(f=>{text+=`Корма | ${f.type} | Выдано:${f.issued} ${f.unit} | Запас:${f.stock} ${f.unit} | Компоненты:${f.components}\n`;});
+  machines.forEach(m=>{text+=`Техника | ${m.type} | ТО:${m.lastService} | Топливо:${m.fuel} | Моточасы:${m.motohours} | Локация:${m.location} | Статус:${m.status}\n`;});
+  navigator.clipboard.writeText(text).then(()=>alert('Отчёт скопирован!'));
+}
+
+// ===== Charts =====
+let weightChartCtx=document.getElementById('weightChart').getContext('2d');
+let feedChartCtx=document.getElementById('feedChart').getContext('2d');
+let weightChart=new Chart(weightChartCtx,{type:'line',data:{labels:[],datasets:[{label:'Вес животных (кг)',data:[],borderColor:'#28a745',fill:false}]},options:{responsive:true,animation:{duration:500}}});
+let feedChart=new Chart(feedChartCtx,{type:'bar',data:{labels:[],datasets:[{label:'Выдано',data:[],backgroundColor:'#28a745'},{label:'Запас',data:[],backgroundColor:'#ffc107'}]},options:{responsive:true,animation:{duration:500}}});
+
+function renderCharts(){
+  // Вес животных
+  weightChart.data.labels=animals.map(a=>a.name); weightChart.data.datasets[0].data=animals.map(a=>Number(a.weight)||0); weightChart.update();
+  // Корма
+  feedChart.data.labels=feeds.map(f=>f.type); feedChart.data.datasets[0].data=feeds.map(f=>Number(f.issued)||0); feedChart.data.datasets[1].data=feeds.map(f=>Number(f.stock)||0); feedChart.update();
+}
+
+// ===== Canvas Background Animation =====
+const canvas=document.getElementById('bg'); const ctx=canvas.getContext('2d');
+let W=canvas.width=window.innerWidth, H=canvas.height=window.innerHeight;
+window.addEventListener('resize',()=>{W=canvas.width=window.innerWidth; H=canvas.height=window.innerHeight;});
+
+class Wheat{ constructor(x,y,h){ this.x=x; this.y=y; this.h=h; this.offset=Math.random()*2*Math.PI; } draw(){ ctx.strokeStyle="#f0e68c"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(this.x,this.y); ctx.quadraticCurveTo(this.x+5,this.y-this.h/2+5*Math.sin(Date.now()/500+this.offset),this.x,this.y-this.h); ctx.stroke(); } }
+let wheats=[]; for(let i=0;i<200;i++){ wheats.push(new Wheat(Math.random()*W,H-Math.random()*50+20,50+Math.random()*50)); }
+
+let sunX=0;
+function animate(){
+  ctx.clearRect(0,0,W,H);
+  // небо градиент
+  let grd=ctx.createLinearGradient(0,0,0,H); grd.addColorStop(0,"#87ceeb"); grd.addColorStop(1,"#d0f4f7"); ctx.fillStyle=grd; ctx.fillRect(0,0,W,H);
+  // солнце
+  sunX=(sunX+0.5)%W; ctx.beginPath(); ctx.arc(sunX,80,50,0,2*Math.PI); ctx.fillStyle="yellow"; ctx.fill();
+  // облака
+  ctx.fillStyle="rgba(255,255,255,0.6)";
+  ctx.beginPath(); ctx.arc((Date.now()/50)%W,60,40,0,2*Math.PI); ctx.fill();
+  ctx.beginPath(); ctx.arc((Date.now()/60+200)%W,100,30,0,2*Math.PI); ctx.fill();
+  // пшеница
+  wheats.forEach(w=>w.draw());
+  requestAnimationFrame(animate);
+}
+animate();
+</script>
+
+</body>
+</html>
+
